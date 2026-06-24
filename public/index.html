@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reception Dashboard - Queue Cure</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+
+<body class="bg-gray-100 p-6 md:p-12">
+    <div class="max-w-4xl mx-auto space-y-6">
+        <h1 class="text-3xl font-bold text-gray-800">Clinic Reception Dashboard</h1>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+                <div class="bg-white p-5 border rounded-xl shadow-sm space-y-3">
+                    <h2 class="font-semibold text-lg text-gray-700">Add New Patient</h2>
+                    <input id="patientName" type="text" placeholder="Enter Patient Name"
+                        class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button onclick="addPatient()"
+                        class="w-full bg-blue-600 text-white p-2 rounded-md font-medium hover:bg-blue-700 transition">
+                        Issue Token
+                    </button>
+                </div>
+                <div class="bg-white p-5 border rounded-xl shadow-sm space-y-3">
+                    <h2 class="font-semibold text-lg text-gray-700">Clinic Config</h2>
+                    <label class="block text-sm text-gray-500">Avg. Consultation Time (mins):</label>
+                    <input id="avgTimeInput" type="number" value="15" onchange="updateConfig(this.value)"
+                        class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button onclick="callNext()"
+                    class="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-emerald-700 transition tracking-wide">
+                    📢 CALL NEXT PATIENT
+                </button>
+            </div>
+            <div class="bg-white p-5 border rounded-xl shadow-sm flex flex-col">
+                <h2 class="font-semibold text-lg text-gray-700 mb-3">Internal Lineup Status</h2>
+                <div id="servingDisplay" class="text-sm bg-blue-50 text-blue-800 p-3 rounded-md mb-4 font-medium">
+                    Now Serving: Loading...
+                </div>
+                <ul id="queueList" class="space-y-2 flex-grow overflow-y-auto max-h-64"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        function addPatient() {
+            const input = document.getElementById('patientName');
+            if (input.value.trim()) {
+                socket.emit('addPatient', input.value.trim());
+                input.value = '';
+            }
+        }
+
+        function callNext() {
+            socket.emit('callNext');
+        }
+
+        function updateConfig(val) {
+            socket.emit('updateConfig', val);
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t] || t));
+        }
+
+        socket.on('stateUpdate', (state) => {
+            if (document.activeElement !== document.getElementById('avgTimeInput')) {
+                document.getElementById('avgTimeInput').value = state.avgConsultationTime;
+            }
+            const servingDiv = document.getElementById('servingDisplay');
+            if (state.currentlyServing) {
+                servingDiv.innerHTML = `Now Serving: Token #${state.currentlyServing.tokenNumber} - <strong>${escapeHTML(state.currentlyServing.name)}</strong>`;
+                servingDiv.className = "text-sm bg-green-50 text-green-800 p-3 rounded-md mb-4 font-medium border border-green-200";
+            } else {
+                servingDiv.textContent = "Now Serving: None (Line is empty)";
+                servingDiv.className = "text-sm bg-blue-50 text-blue-800 p-3 rounded-md mb-4 font-medium border border-blue-200";
+            }
+
+            const list = document.getElementById('queueList');
+            list.innerHTML = '';
+            state.waitingPatients.forEach(p => {
+                const li = document.createElement('li');
+                // FIXED: Changed bg-slate-50 to bg-gray-50 for dynamic lists
+                li.className = "flex justify-between items-center p-2.5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm";
+                li.innerHTML = `<span class="text-gray-700 font-medium">${escapeHTML(p.name)}</span><span class="font-mono font-bold text-blue-600">Token #${p.tokenNumber}</span>`;
+                list.appendChild(li);
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live OPD Waiting Room Display</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6 md:p-12">
+    <div class="max-w-5xl mx-auto space-y-8">
+        <header class="flex justify-between items-center border-b border-gray-800 pb-4">
+            <h1 class="text-2xl md:text-4xl font-extrabold text-teal-400 tracking-wide">🔴 LIVE PATIENT QUEUE STATUS
+            </h1>
+            <div class="bg-gray-800 px-4 py-2 rounded-lg text-sm border border-gray-700 text-gray-400 animate-pulse">
+                Auto-Sync Active
+            </div>
+        </header>
+
+        <div
+            class="bg-gradient-to-r from-teal-900 to-gray-800 p-8 rounded-3xl border border-teal-500 border-opacity-30 text-center space-y-2 shadow-2xl">
+            <h2 class="text-xl font-medium uppercase tracking-widest text-teal-300">NOW SERVING</h2>
+            <div id="bigTokenDisplay" class="text-7xl md:text-9xl font-black text-white filter drop-shadow-md">--</div>
+            <p id="bigNameDisplay" class="text-xl md:text-3xl font-semibold text-gray-300">Waiting for next patient...
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2 bg-gray-800 p-6 rounded-2xl border border-gray-700 flex flex-col">
+                <h3 class="text-lg font-bold text-gray-300 mb-4">Up Next in Line</h3>
+                <ul id="upcomingList" class="space-y-3 flex-grow overflow-y-auto max-h-96"></ul>
+            </div>
+
+            <div class="bg-gray-800 p-6 rounded-2xl border border-gray-700 space-y-6">
+                <div>
+                    <h3 class="text-sm font-semibold uppercase text-gray-400 tracking-wider">Total Line Size</h3>
+                    <div id="totalWaiting" class="text-5xl font-bold text-white mt-1">0</div>
+                    <p class="text-xs text-gray-500 mt-1">patients remaining ahead</p>
+                </div>
+                <div class="border-t border-gray-700 pt-4">
+                    <h3 class="text-sm font-semibold uppercase text-gray-400 tracking-wider">Est. Maximum Wait Time</h3>
+                    <div id="estWaitTime" class="text-5xl font-bold text-amber-400 mt-1">0 <span
+                            class="text-lg font-medium text-gray-400">mins</span></div>
+                    <p class="text-xs text-gray-500 mt-1">Calculated via live clinic pacing</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        function escapeHTML(str) { return str.replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t] || t)); }
+
+        socket.on('stateUpdate', (state) => {
+            // Update Hero Element Displays
+            const bigToken = document.getElementById('bigTokenDisplay');
+            const bigName = document.getElementById('bigNameDisplay');
+            if (state.currentlyServing) {
+                bigToken.textContent = `TOKEN #${state.currentlyServing.tokenNumber}`;
+                bigName.textContent = escapeHTML(state.currentlyServing.name);
+            } else {
+                bigToken.textContent = "FREE";
+                bigName.textContent = "No patient inside right now";
+            }
+
+            // Update Statistics
+            const totalCount = state.waitingPatients.length;
+            document.getElementById('totalWaiting').textContent = totalCount;
+            document.getElementById('estWaitTime').innerHTML = `${totalCount * state.avgConsultationTime} <span class="text-lg font-medium text-gray-400">mins</span>`;
+
+            // Populate the list of patients up next
+            const upNext = document.getElementById('upcomingList');
+            upNext.innerHTML = '';
+
+            if (totalCount === 0) {
+                upNext.innerHTML = `<li class="text-center p-8 text-gray-500 italic">Waiting room is currently empty. Please proceed to registration.</li>`;
+                return;
+            }
+
+            state.waitingPatients.forEach((p, idx) => {
+                const li = document.createElement('li');
+                // FIXED: Refactored v3 opacity strings into native v2 classes (bg-opacity-50 and border-opacity-60)
+                li.className = "flex justify-between items-center p-4 bg-gray-900 bg-opacity-50 rounded-xl border border-gray-700 border-opacity-60";
+
+                // Calculate wait time relative to their place in line
+                const individualWait = idx * state.avgConsultationTime;
+
+                li.innerHTML = `
+                    <div class="flex items-center space-x-4">
+                        <span class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center font-bold text-sm text-gray-300">${idx + 1}</span>
+                        <div>
+                            <p class="font-semibold text-white">${escapeHTML(p.name)}</p>
+                            <p class="text-xs text-gray-400">Est. wait: ~${individualWait} mins</p>
+                        </div>
+                    </div>
+                    <span class="font-mono font-bold text-teal-400 text-lg">Token #${p.tokenNumber}</span>
+                `;
+                upNext.appendChild(li);
+            });
+        });
+    </script>
+</body>
+
+</html>
